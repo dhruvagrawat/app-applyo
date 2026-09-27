@@ -52,6 +52,7 @@
     "next-themes": "latest",
     "pdf-parse": "2.4.5",
     "pdfjs-dist": "5.4.394",
+    "playwright-core": "1.55.0",
     "react": "19.2.0",
     "react-day-picker": "9.8.0",
     "react-dom": "19.2.0",

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
@@ -8,6 +8,9 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Spinner } from "@/components/ui/spinner"
 import { FileText, Copy, Check, Sparkles } from "lucide-react"
+import { SavedResumeButtons } from "@/components/saved-resume-button"
+import { JobLinkImporter } from "@/components/job-link-importer"
+import { consumeHandoff } from "@/lib/handoff"
 
 export default function CoverLetterPage() {
   const [resumeText, setResumeText] = useState("")
@@ -17,6 +20,13 @@ export default function CoverLetterPage() {
   const [result, setResult] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
+
+  // Pre-fill from Job Tracker / other tools
+  useEffect(() => {
+    const handoff = consumeHandoff()
+    if (handoff?.jobDescription) setJobDescription(handoff.jobDescription)
+    if (handoff?.resumeText) setResumeText(handoff.resumeText)
+  }, [])
 
   const handleGenerate = async () => {
     if (!jobDescription.trim()) {
@@ -91,6 +101,9 @@ export default function CoverLetterPage() {
                   Resume
                   <span className="text-muted-foreground font-normal">(Optional)</span>
                 </Label>
+                <div className="flex justify-end -mt-1 mb-1.5">
+                  <SavedResumeButtons resumeText={resumeText} onLoad={setResumeText} />
+                </div>
                 <Textarea
                   id="resume"
                   placeholder="Paste your resume to personalize the letter..."
@@ -104,6 +117,7 @@ export default function CoverLetterPage() {
                 <Label htmlFor="jd" className="text-xs font-medium text-foreground mb-1.5 block">
                   Job Description
                 </Label>
+                <JobLinkImporter className="mb-2" onImported={(text) => setJobDescription(text)} />
                 <Textarea
                   id="jd"
                   placeholder="Paste the job description..."

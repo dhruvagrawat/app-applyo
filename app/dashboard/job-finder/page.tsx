@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
 import { Briefcase, MapPin, Search, TrendingUp } from "lucide-react"
 import { ResumeUploader } from "@/components/resume-uploader"
+import { SavedResumeButtons } from "@/components/saved-resume-button"
 
 export default function JobFinderPage() {
   const [resumeText, setResumeText] = useState("")
@@ -82,6 +83,9 @@ export default function JobFinderPage() {
             <CardContent className="space-y-4">
               <div>
                 <Label className="text-xs font-medium text-foreground mb-1.5 block">Your Resume</Label>
+                <div className="flex justify-end -mt-1 mb-1.5">
+                  <SavedResumeButtons resumeText={resumeText} onLoad={setResumeText} />
+                </div>
                 <ResumeUploader
                   onSuccess={(text) => {
                     setResumeText(text)

@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Spinner } from "@/components/ui/spinner"
 import { Brain, Copy, Check, FileText, Sparkles, Target } from "lucide-react"
+import { SavedResumeButtons } from "@/components/saved-resume-button"
 
 export default function ResumeImproverPage() {
   const [resumeText, setResumeText] = useState("")
@@ -109,6 +110,9 @@ export default function ResumeImproverPage() {
                     ({wordCount} {wordCount === 1 ? 'word' : 'words'})
                   </span>
                 </Label>
+                <div className="flex justify-end -mt-1 mb-1.5">
+                  <SavedResumeButtons resumeText={resumeText} onLoad={updateWordCount} />
+                </div>
                 <Textarea
                   id="resume"
                   placeholder="Paste your resume content here... Include your experience, skills, education, and achievements. Minimum 100 words required."

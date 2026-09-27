@@ -1,0 +1,25 @@
+export const APPLICATION_PROFILE_FIELDS = [
+  "full_name",
+  "email",
+  "phone",
+  "location",
+  "linkedin",
+  "github",
+  "portfolio",
+  "current_company",
+  "current_title",
+  "years_experience",
+  "work_authorization",
+  "requires_sponsorship",
+  "willing_to_relocate",
+  "notice_period",
+  "salary_expectation",
+  "pronouns",
+  "gender",
+  "race_ethnicity",
+  "veteran_status",
+  "disability_status",
+  "extra_notes",
+] as const
+
+export type ApplicationProfile = Partial<Record<(typeof APPLICATION_PROFILE_FIELDS)[number], string>>

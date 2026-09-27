@@ -1,17 +1,27 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Spinner } from "@/components/ui/spinner"
 import { Zap, AlertCircle, Target, FileText, TrendingUp, CheckCircle2 } from "lucide-react"
+import { SavedResumeButtons } from "@/components/saved-resume-button"
+import { JobLinkImporter } from "@/components/job-link-importer"
+import { consumeHandoff } from "@/lib/handoff"
 
 export default function ATSCheckerPage() {
   const [resumeText, setResumeText] = useState("")
   const [jobDescription, setJobDescription] = useState("")
   const [isLoading, setIsLoading] = useState(false)
+
+  // Pre-fill from Job Tracker / other tools
+  useEffect(() => {
+    const handoff = consumeHandoff()
+    if (handoff?.jobDescription) setJobDescription(handoff.jobDescription)
+    if (handoff?.resumeText) setResumeText(handoff.resumeText)
+  }, [])
   const [result, setResult] = useState<any>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -94,6 +104,9 @@ export default function ATSCheckerPage() {
             <CardContent className="space-y-4">
               <div>
                 <Label htmlFor="resume" className="text-xs font-medium text-foreground mb-1.5 block">Resume Text</Label>
+                <div className="flex justify-end -mt-1 mb-1.5">
+                  <SavedResumeButtons resumeText={resumeText} onLoad={setResumeText} />
+                </div>
                 <Textarea
                   id="resume"
                   placeholder="Paste your resume content here..."
@@ -108,6 +121,7 @@ export default function ATSCheckerPage() {
                   Job Description
                   <span className="text-muted-foreground font-normal">(optional)</span>
                 </Label>
+                <JobLinkImporter className="mb-2" onImported={(text) => setJobDescription(text)} />
                 <Textarea
                   id="jd"
                   placeholder="Paste the job description for targeted analysis..."

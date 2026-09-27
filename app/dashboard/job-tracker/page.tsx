@@ -1,28 +1,102 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useEffect, useMemo, useState } from "react"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Spinner } from "@/components/ui/spinner"
-import { BookOpen, Plus, Trash2, Briefcase, Calendar } from "lucide-react"
-import { createBrowserClient } from "@supabase/ssr"
+import {
+  BookOpen,
+  Plus,
+  Trash2,
+  Calendar,
+  Link2,
+  Sparkles,
+  MapPin,
+  DollarSign,
+  ExternalLink,
+  ChevronDown,
+  Search,
+  Zap,
+  FileText,
+  MessageSquare,
+  BarChart3,
+  AlertTriangle,
+  Target,
+} from "lucide-react"
+import { createClient } from "@/lib/supabase/client"
+import { jobToDescription, setHandoff } from "@/lib/handoff"
+import type { ParsedJob } from "@/lib/jobs/parse-job"
+
+const STATUSES = [
+  { value: "saved", label: "Saved", style: "bg-slate-100 dark:bg-slate-800/50 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700" },
+  { value: "applied", label: "Applied", style: "bg-blue-100 dark:bg-blue-950/30 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800" },
+  { value: "interviewing", label: "Interviewing", style: "bg-amber-100 dark:bg-amber-950/30 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800" },
+  { value: "offer", label: "Offer", style: "bg-emerald-100 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800" },
+  { value: "rejected", label: "Rejected", style: "bg-red-100 dark:bg-red-950/30 text-red-700 dark:text-red-300 border-red-200 dark:border-red-800" },
+]
+
+const statusStyle = (s: string) => STATUSES.find((x) => x.value === s)?.style || STATUSES[1].style
+
+interface Job {
+  id: string
+  company_name: string
+  job_title: string
+  status: string
+  applied_date: string | null
+  created_at: string
+  job_url?: string | null
+  location?: string | null
+  work_mode?: string | null
+  employment_type?: string | null
+  salary?: string | null
+  seniority?: string | null
+  summary?: string | null
+  description?: string | null
+  skills?: string[] | null
+  requirements?: string[] | null
+  red_flags?: string[] | null
+  deadline?: string | null
+  source?: string | null
+  notes?: string | null
+  match_score?: number | null
+  next_action?: string | null
+  next_action_date?: string | null
+}
+
+type Draft = Partial<ParsedJob> & { status: string; applied_date: string; notes?: string }
+
+const today = () => new Date().toISOString().split("T")[0]
+
+function daysSince(date: string | null) {
+  if (!date) return null
+  return Math.floor((Date.now() - new Date(date).getTime()) / 86_400_000)
+}
 
 export default function JobTrackerPage() {
-  const [jobs, setJobs] = useState<any[]>([])
+  const router = useRouter()
+  const supabase = useMemo(() => createClient(), [])
+  const [jobs, setJobs] = useState<Job[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  const [companyName, setCompanyName] = useState("")
-  const [jobTitle, setJobTitle] = useState("")
-  const [status, setStatus] = useState("applied")
-  const [appliedDate, setAppliedDate] = useState(new Date().toISOString().split("T")[0])
-  const [isAdding, setIsAdding] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  const supabase = createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL || "",
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "",
-  )
+  // Smart add
+  const [link, setLink] = useState("")
+  const [pasteText, setPasteText] = useState("")
+  const [showPaste, setShowPaste] = useState(false)
+  const [isParsing, setIsParsing] = useState(false)
+  const [draft, setDraft] = useState<Draft | null>(null)
+  const [isSaving, setIsSaving] = useState(false)
+
+  // List
+  const [query, setQuery] = useState("")
+  const [filter, setFilter] = useState("all")
+  const [expanded, setExpanded] = useState<string | null>(null)
+  const [scoring, setScoring] = useState<string | null>(null)
 
   useEffect(() => {
     loadJobs()
@@ -34,255 +108,467 @@ export default function JobTrackerPage() {
         data: { user },
       } = await supabase.auth.getUser()
       if (!user) return
-
       const { data, error } = await supabase
         .from("job_applications")
         .select("*")
         .eq("user_id", user.id)
-        .order("applied_date", { ascending: false })
-
-      if (!error) setJobs(data || [])
+        .order("created_at", { ascending: false })
+      if (error) throw error
+      setJobs((data as Job[]) || [])
     } catch (err) {
-      console.error("Failed to load jobs")
+      setError("Failed to load applications")
     } finally {
       setIsLoading(false)
     }
   }
 
-  const addJob = async () => {
-    if (!companyName.trim() || !jobTitle.trim()) return
+  const parseLink = async () => {
+    if (!link.trim() && !pasteText.trim()) return
+    setIsParsing(true)
+    setError(null)
+    try {
+      const res = await fetch("/api/jobs/parse", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: link.trim() || undefined, text: pasteText.trim() || undefined }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        // Most common reason: LinkedIn/Indeed login walls — offer paste fallback.
+        setShowPaste(true)
+        throw new Error(data.error || "Couldn't read that job")
+      }
+      setDraft({ ...(data.job as ParsedJob), status: "saved", applied_date: today() })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Parsing failed")
+    } finally {
+      setIsParsing(false)
+    }
+  }
 
-    setIsAdding(true)
+  const startManual = () =>
+    setDraft({ job_title: "", company_name: "", status: "applied", applied_date: today(), job_url: link.trim() || null })
+
+  const saveDraft = async () => {
+    if (!draft?.job_title?.trim() || !draft.company_name?.trim()) {
+      setError("Job title and company are required")
+      return
+    }
+    setIsSaving(true)
+    setError(null)
     try {
       const {
         data: { user },
       } = await supabase.auth.getUser()
       if (!user) return
-
-      const { data, error } = await supabase
-        .from("job_applications")
-        .insert([
-          {
-            user_id: user.id,
-            company_name: companyName,
-            job_title: jobTitle,
-            status,
-            applied_date: appliedDate,
-          },
-        ])
-        .select()
-
-      if (!error) {
-        setJobs([data[0], ...jobs])
-        setCompanyName("")
-        setJobTitle("")
-        setStatus("applied")
+      const row = {
+        user_id: user.id,
+        company_name: draft.company_name.trim(),
+        job_title: draft.job_title.trim(),
+        status: draft.status,
+        applied_date: draft.status === "saved" ? null : draft.applied_date,
+        job_url: draft.job_url || null,
+        location: draft.location || null,
+        work_mode: draft.work_mode || null,
+        employment_type: draft.employment_type || null,
+        salary: draft.salary || null,
+        seniority: draft.seniority || null,
+        summary: draft.summary || null,
+        description: draft.description || null,
+        skills: draft.skills || [],
+        requirements: draft.requirements || [],
+        red_flags: draft.red_flags || [],
+        deadline: draft.deadline || null,
+        source: draft.source || null,
+        notes: draft.notes || null,
       }
-    } catch (err) {
-      console.error("Failed to add job")
+      const { data, error } = await supabase.from("job_applications").insert([row]).select()
+      if (error) throw error
+      setJobs([data[0] as Job, ...jobs])
+      setDraft(null)
+      setLink("")
+      setPasteText("")
+      setShowPaste(false)
+      setExpanded((data[0] as Job).id)
+    } catch (err: any) {
+      setError(
+        err?.message?.includes("column")
+          ? "Database needs updating — run scripts/schema_v3_additions.sql in Supabase."
+          : err?.message || "Failed to save",
+      )
     } finally {
-      setIsAdding(false)
+      setIsSaving(false)
     }
+  }
+
+  const updateJob = async (id: string, patch: Partial<Job>) => {
+    const prev = jobs
+    setJobs(jobs.map((j) => (j.id === id ? { ...j, ...patch } : j)))
+    const { error } = await supabase
+      .from("job_applications")
+      .update({ ...patch, updated_at: new Date().toISOString() })
+      .eq("id", id)
+    if (error) {
+      setJobs(prev)
+      setError(error.message)
+    }
+  }
+
+  const changeStatus = (job: Job, status: string) => {
+    const patch: Partial<Job> = { status }
+    if (status !== "saved" && !job.applied_date) patch.applied_date = today()
+    updateJob(job.id, patch)
   }
 
   const deleteJob = async (id: string) => {
+    if (!window.confirm("Delete this application?")) return
+    await supabase.from("job_applications").delete().eq("id", id)
+    setJobs(jobs.filter((j) => j.id !== id))
+  }
+
+  const scoreFit = async (job: Job) => {
+    setScoring(job.id)
+    setError(null)
     try {
-      await supabase.from("job_applications").delete().eq("id", id)
-      setJobs(jobs.filter((j) => j.id !== id))
+      const r = await fetch("/api/resumes/latest").then((r) => r.json())
+      if (!r.resume?.text) throw new Error("Save a resume first (use “Save” next to any resume box).")
+      const res = await fetch("/api/core/job-resume-compare", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ resumeText: r.resume.text, jobDescription: jobToDescription(job) }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || "Scoring failed")
+      const score = Math.round(Number(data.result?.match_score) || 0)
+      const gaps: string[] = data.result?.gaps || []
+      await updateJob(job.id, {
+        match_score: score,
+        notes: job.notes || (gaps.length ? `Gaps to address:\n${gaps.map((g) => `• ${g}`).join("\n")}` : job.notes),
+      })
     } catch (err) {
-      console.error("Failed to delete job")
+      setError(err instanceof Error ? err.message : "Scoring failed")
+    } finally {
+      setScoring(null)
     }
   }
 
-  const getStatusStyle = (status: string) => {
-    switch (status) {
-      case "offer":
-        return "bg-emerald-100 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
-      case "rejected":
-        return "bg-red-100 dark:bg-red-950/30 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800"
-      case "interviewing":
-        return "bg-amber-100 dark:bg-amber-950/30 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800"
-      default:
-        return "bg-blue-100 dark:bg-blue-950/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800"
-    }
+  const openTool = (job: Job, path: string) => {
+    setHandoff({ jobDescription: jobToDescription(job), jobUrl: job.job_url || undefined })
+    router.push(path)
   }
 
-  const statusCounts = {
-    total: jobs.length,
-    applied: jobs.filter(j => j.status === "applied").length,
-    interviewing: jobs.filter(j => j.status === "interviewing").length,
-    offer: jobs.filter(j => j.status === "offer").length,
-    rejected: jobs.filter(j => j.status === "rejected").length,
-  }
+  const counts = STATUSES.reduce<Record<string, number>>(
+    (acc, s) => ({ ...acc, [s.value]: jobs.filter((j) => j.status === s.value).length }),
+    {},
+  )
+  const responseRate = (() => {
+    const sent = jobs.filter((j) => j.status !== "saved").length
+    const responded = jobs.filter((j) => ["interviewing", "offer"].includes(j.status)).length
+    return sent ? Math.round((responded / sent) * 100) : 0
+  })()
+
+  const followUps = jobs.filter((j) => {
+    const d = daysSince(j.applied_date)
+    return j.status === "applied" && d !== null && d >= 7
+  })
+
+  const visible = jobs.filter((j) => {
+    if (filter !== "all" && j.status !== filter) return false
+    if (!query.trim()) return true
+    const q = query.toLowerCase()
+    return [j.job_title, j.company_name, j.location, ...(j.skills || [])].some((v) => v?.toLowerCase().includes(q))
+  })
 
   return (
     <div className="p-6 md:p-8 animate-fade-in">
-      <div className="max-w-4xl mx-auto space-y-6">
+      <div className="max-w-5xl mx-auto space-y-6">
         {/* Header */}
-        <div className="animate-slide-up">
-          <div className="flex items-center gap-3 mb-1">
-            <div className="w-10 h-10 bg-purple-100 dark:bg-purple-950/50 rounded-xl flex items-center justify-center">
-              <BookOpen className="w-5 h-5 text-purple-600 dark:text-purple-400" />
-            </div>
-            <div>
-              <h1 className="text-2xl md:text-3xl font-bold text-foreground tracking-tight">Job Tracker</h1>
-              <p className="text-sm text-muted-foreground">Track your job applications</p>
-            </div>
+        <div className="animate-slide-up flex items-center gap-3">
+          <div className="w-10 h-10 bg-purple-100 dark:bg-purple-950/50 rounded-xl flex items-center justify-center">
+            <BookOpen className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+          </div>
+          <div>
+            <h1 className="text-2xl md:text-3xl font-bold text-foreground tracking-tight">Job Tracker</h1>
+            <p className="text-sm text-muted-foreground">Paste a job link — AI fills in the rest</p>
           </div>
         </div>
 
-        {/* Status Summary */}
+        {/* Stats */}
         {jobs.length > 0 && (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 animate-slide-up" style={{ animationDelay: "0.05s" }}>
-            <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900/30 rounded-xl p-3 text-center">
-              <div className="text-lg font-bold text-blue-700 dark:text-blue-300">{statusCounts.applied}</div>
-              <div className="text-[10px] text-blue-600 dark:text-blue-400 font-medium uppercase tracking-wide">Applied</div>
-            </div>
-            <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/30 rounded-xl p-3 text-center">
-              <div className="text-lg font-bold text-amber-700 dark:text-amber-300">{statusCounts.interviewing}</div>
-              <div className="text-[10px] text-amber-600 dark:text-amber-400 font-medium uppercase tracking-wide">Interviewing</div>
-            </div>
-            <div className="bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900/30 rounded-xl p-3 text-center">
-              <div className="text-lg font-bold text-emerald-700 dark:text-emerald-300">{statusCounts.offer}</div>
-              <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium uppercase tracking-wide">Offers</div>
-            </div>
-            <div className="bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/30 rounded-xl p-3 text-center">
-              <div className="text-lg font-bold text-red-700 dark:text-red-300">{statusCounts.rejected}</div>
-              <div className="text-[10px] text-red-600 dark:text-red-400 font-medium uppercase tracking-wide">Rejected</div>
+          <div className="grid grid-cols-3 md:grid-cols-6 gap-3 animate-slide-up">
+            {STATUSES.map((s) => (
+              <button
+                key={s.value}
+                onClick={() => setFilter(filter === s.value ? "all" : s.value)}
+                className={`rounded-xl p-3 text-center border smooth-hover ${s.style} ${filter === s.value ? "ring-2 ring-primary" : ""}`}
+              >
+                <div className="text-lg font-bold">{counts[s.value]}</div>
+                <div className="text-[10px] font-medium uppercase tracking-wide">{s.label}</div>
+              </button>
+            ))}
+            <div className="rounded-xl p-3 text-center border border-border bg-muted/40">
+              <div className="text-lg font-bold text-foreground">{responseRate}%</div>
+              <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Response rate</div>
             </div>
           </div>
         )}
 
-        {/* Add New Application */}
-        <Card className="bg-card border-border animate-slide-up" style={{ animationDelay: "0.1s" }}>
-          <CardHeader className="pb-4">
+        {followUps.length > 0 && (
+          <div className="flex items-start gap-2 p-3 rounded-lg border border-amber-300/50 bg-amber-50 dark:bg-amber-950/20 text-xs text-amber-800 dark:text-amber-300">
+            <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+            <span>
+              {followUps.length} application{followUps.length > 1 ? "s have" : " has"} had no update for 7+ days — consider a
+              follow-up: {followUps.slice(0, 3).map((j) => j.company_name).join(", ")}
+              {followUps.length > 3 ? "…" : ""}
+            </span>
+          </div>
+        )}
+
+        {/* Smart add */}
+        <Card className="bg-card border-border animate-slide-up">
+          <CardHeader className="pb-3">
             <CardTitle className="text-base text-foreground flex items-center gap-2">
-              <Plus className="w-4 h-4 text-primary" />
-              Add New Application
+              <Sparkles className="w-4 h-4 text-primary" /> Add a job
             </CardTitle>
+            <CardDescription className="text-xs">
+              Works with Greenhouse, Lever, Ashby, Workday, company career pages and most job boards.
+            </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <Label className="text-xs font-medium text-foreground mb-1.5 flex items-center gap-1.5">
-                  <Briefcase className="w-3.5 h-3.5 text-muted-foreground" />
-                  Company
-                </Label>
-                <Input
-                  placeholder="Company name"
-                  value={companyName}
-                  onChange={(e) => setCompanyName(e.target.value)}
-                  className="h-10 text-sm bg-muted border-border focus:border-primary smooth-hover"
-                />
-              </div>
-              <div>
-                <Label className="text-xs font-medium text-foreground mb-1.5 block">Job Title</Label>
-                <Input
-                  placeholder="Job title"
-                  value={jobTitle}
-                  onChange={(e) => setJobTitle(e.target.value)}
-                  className="h-10 text-sm bg-muted border-border focus:border-primary smooth-hover"
-                />
-              </div>
-            </div>
+          <CardContent className="space-y-3">
+            {!draft && (
+              <>
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <Link2 className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      type="url"
+                      placeholder="https://jobs.lever.co/company/…"
+                      value={link}
+                      onChange={(e) => setLink(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && parseLink()}
+                      className="h-10 pl-9 text-sm bg-muted border-border"
+                      disabled={isParsing}
+                    />
+                  </div>
+                  <Button onClick={parseLink} disabled={isParsing || (!link.trim() && !pasteText.trim())} className="h-10">
+                    {isParsing ? <Spinner className="w-4 h-4 mr-2" /> : <Sparkles className="w-4 h-4 mr-2" />}
+                    {isParsing ? "Reading job…" : "Parse"}
+                  </Button>
+                </div>
+                {showPaste && (
+                  <Textarea
+                    placeholder="Paste the job description here (useful for LinkedIn or pages behind a login)"
+                    value={pasteText}
+                    onChange={(e) => setPasteText(e.target.value)}
+                    className="min-h-28 text-xs bg-muted border-border resize-none"
+                  />
+                )}
+                <div className="flex gap-4 text-xs">
+                  <button className="text-primary hover:underline" onClick={() => setShowPaste(!showPaste)}>
+                    {showPaste ? "Hide text box" : "Paste description instead"}
+                  </button>
+                  <button className="text-muted-foreground hover:text-foreground hover:underline" onClick={startManual}>
+                    Add manually
+                  </button>
+                </div>
+              </>
+            )}
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <Label className="text-xs font-medium text-foreground mb-1.5 block">Status</Label>
-                <Select value={status} onValueChange={setStatus}>
-                  <SelectTrigger className="h-10 text-sm bg-muted border-border focus:border-primary">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="applied">Applied</SelectItem>
-                    <SelectItem value="interviewing">Interviewing</SelectItem>
-                    <SelectItem value="offer">Offer</SelectItem>
-                    <SelectItem value="rejected">Rejected</SelectItem>
-                  </SelectContent>
-                </Select>
+            {draft && (
+              <div className="space-y-3 animate-fade-in">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <Label className="text-[11px] text-muted-foreground mb-1 block">Job title</Label>
+                    <Input value={draft.job_title || ""} onChange={(e) => setDraft({ ...draft, job_title: e.target.value })} className="h-9 text-sm bg-muted" />
+                  </div>
+                  <div>
+                    <Label className="text-[11px] text-muted-foreground mb-1 block">Company</Label>
+                    <Input value={draft.company_name || ""} onChange={(e) => setDraft({ ...draft, company_name: e.target.value })} className="h-9 text-sm bg-muted" />
+                  </div>
+                  <div>
+                    <Label className="text-[11px] text-muted-foreground mb-1 block">Location</Label>
+                    <Input value={draft.location || ""} onChange={(e) => setDraft({ ...draft, location: e.target.value })} className="h-9 text-sm bg-muted" />
+                  </div>
+                  <div>
+                    <Label className="text-[11px] text-muted-foreground mb-1 block">Salary</Label>
+                    <Input value={draft.salary || ""} onChange={(e) => setDraft({ ...draft, salary: e.target.value })} className="h-9 text-sm bg-muted" />
+                  </div>
+                  <div>
+                    <Label className="text-[11px] text-muted-foreground mb-1 block">Status</Label>
+                    <Select value={draft.status} onValueChange={(v) => setDraft({ ...draft, status: v })}>
+                      <SelectTrigger className="h-9 text-sm bg-muted"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {STATUSES.map((s) => (
+                          <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {draft.status !== "saved" && (
+                    <div>
+                      <Label className="text-[11px] text-muted-foreground mb-1 block">Applied on</Label>
+                      <Input type="date" value={draft.applied_date} onChange={(e) => setDraft({ ...draft, applied_date: e.target.value })} className="h-9 text-sm bg-muted" />
+                    </div>
+                  )}
+                </div>
+                {draft.summary && <p className="text-xs text-muted-foreground">{draft.summary}</p>}
+                {!!draft.skills?.length && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {draft.skills.map((s) => (
+                      <span key={s} className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary">{s}</span>
+                    ))}
+                  </div>
+                )}
+                {!!draft.red_flags?.length && (
+                  <div className="text-[11px] text-amber-700 dark:text-amber-400">
+                    ⚠ {draft.red_flags.join(" · ")}
+                  </div>
+                )}
+                <div className="flex gap-2">
+                  <Button onClick={saveDraft} disabled={isSaving}>
+                    {isSaving ? <Spinner className="w-4 h-4 mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
+                    Save to tracker
+                  </Button>
+                  <Button variant="ghost" onClick={() => setDraft(null)}>Cancel</Button>
+                </div>
               </div>
-              <div>
-                <Label className="text-xs font-medium text-foreground mb-1.5 flex items-center gap-1.5">
-                  <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
-                  Date
-                </Label>
-                <Input
-                  type="date"
-                  value={appliedDate}
-                  onChange={(e) => setAppliedDate(e.target.value)}
-                  className="h-10 text-sm bg-muted border-border focus:border-primary smooth-hover"
-                />
-              </div>
-            </div>
+            )}
 
-            <Button
-              onClick={addJob}
-              disabled={isAdding || !companyName.trim() || !jobTitle.trim()}
-              className="w-full h-10 text-sm bg-primary text-primary-foreground hover:bg-primary/90 smooth-hover font-medium"
-            >
-              {isAdding && <Spinner className="mr-2 w-3.5 h-3.5" />}
-              <Plus className="w-3.5 h-3.5 mr-1.5" />
-              Add Application
-            </Button>
+            {error && (
+              <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg text-xs text-destructive">{error}</div>
+            )}
           </CardContent>
         </Card>
 
-        {/* Applications List */}
-        <Card className="bg-card border-border animate-slide-up" style={{ animationDelay: "0.15s" }}>
-          <CardHeader className="pb-4">
-            <CardTitle className="text-base text-foreground flex items-center gap-2">
-              <BookOpen className="w-4 h-4 text-primary" />
-              Applications
-            </CardTitle>
-            <CardDescription className="text-xs text-muted-foreground">{jobs.length} total applications</CardDescription>
+        {/* List */}
+        <Card className="bg-card border-border animate-slide-up">
+          <CardHeader className="pb-3">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+              <div>
+                <CardTitle className="text-base text-foreground">Applications</CardTitle>
+                <CardDescription className="text-xs">
+                  {visible.length} of {jobs.length} {filter !== "all" && `· ${filter}`}
+                </CardDescription>
+              </div>
+              <div className="relative md:w-64">
+                <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <Input placeholder="Search title, company, skill…" value={query} onChange={(e) => setQuery(e.target.value)} className="h-9 pl-8 text-xs bg-muted" />
+              </div>
+            </div>
           </CardHeader>
           <CardContent>
             {isLoading ? (
-              <div className="text-center py-12">
-                <Spinner className="w-8 h-8 mx-auto mb-3 text-primary" />
-                <p className="text-sm text-muted-foreground">Loading...</p>
-              </div>
-            ) : jobs.length === 0 ? (
-              <div className="text-center py-16 space-y-4">
-                <div className="w-14 h-14 mx-auto bg-muted rounded-2xl flex items-center justify-center">
-                  <BookOpen className="w-7 h-7 text-muted-foreground" />
-                </div>
-                <div>
-                  <h3 className="font-medium text-foreground mb-1 text-sm">No Applications Yet</h3>
-                  <p className="text-muted-foreground text-xs">Add your first application to get started!</p>
-                </div>
+              <div className="text-center py-12"><Spinner className="w-8 h-8 mx-auto text-primary" /></div>
+            ) : visible.length === 0 ? (
+              <div className="text-center py-14">
+                <BookOpen className="w-8 h-8 mx-auto text-muted-foreground mb-3" />
+                <p className="text-sm font-medium text-foreground">{jobs.length ? "No matches" : "No applications yet"}</p>
+                <p className="text-xs text-muted-foreground">{jobs.length ? "Try a different filter" : "Paste a job link above to get started"}</p>
               </div>
             ) : (
-              <div className="space-y-2 max-h-125 overflow-y-auto">
-                {jobs.map((job, i) => (
-                  <div
-                    key={job.id}
-                    className="border border-border bg-muted/50 p-4 rounded-xl flex justify-between items-start smooth-hover hover:border-primary/20 animate-fade-in"
-                    style={{ animationDelay: `${i * 0.03}s` }}
-                  >
-                    <div className="min-w-0 flex-1">
-                      <h4 className="text-sm font-medium text-foreground">{job.job_title}</h4>
-                      <p className="text-xs text-muted-foreground mt-0.5">{job.company_name}</p>
-                      <div className="flex items-center gap-2 mt-2">
-                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium capitalize ${getStatusStyle(job.status)}`}>
-                          {job.status}
-                        </span>
-                        <span className="text-[10px] text-muted-foreground flex items-center gap-1">
-                          <Calendar className="w-2.5 h-2.5" />
-                          {new Date(job.applied_date).toLocaleDateString()}
-                        </span>
+              <div className="space-y-2">
+                {visible.map((job) => {
+                  const open = expanded === job.id
+                  const age = daysSince(job.applied_date)
+                  return (
+                    <div key={job.id} className="border border-border bg-muted/40 rounded-xl smooth-hover hover:border-primary/20">
+                      <div className="p-4 flex items-start gap-3">
+                        <button className="min-w-0 flex-1 text-left" onClick={() => setExpanded(open ? null : job.id)}>
+                          <div className="flex items-center gap-2">
+                            <h4 className="text-sm font-medium text-foreground truncate">{job.job_title}</h4>
+                            {job.match_score != null && (
+                              <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${job.match_score >= 75 ? "bg-emerald-500/15 text-emerald-600" : job.match_score >= 50 ? "bg-amber-500/15 text-amber-600" : "bg-red-500/15 text-red-600"}`}>
+                                {job.match_score}% fit
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            {job.company_name}
+                            {job.location && <> · <MapPin className="inline w-3 h-3" /> {job.location}</>}
+                            {job.work_mode && <> · <span className="capitalize">{job.work_mode}</span></>}
+                            {job.salary && <> · <DollarSign className="inline w-3 h-3" />{job.salary}</>}
+                          </p>
+                          <div className="flex items-center gap-2 mt-2 text-[10px] text-muted-foreground">
+                            {job.applied_date ? (
+                              <span className="flex items-center gap-1"><Calendar className="w-2.5 h-2.5" />{new Date(job.applied_date).toLocaleDateString()}{age !== null && age > 0 && ` · ${age}d ago`}</span>
+                            ) : (
+                              <span>Saved {new Date(job.created_at).toLocaleDateString()}</span>
+                            )}
+                            {job.source && <span>· {job.source}</span>}
+                            {job.deadline && <span className="text-amber-600">· Deadline {new Date(job.deadline).toLocaleDateString()}</span>}
+                          </div>
+                        </button>
+                        <Select value={job.status} onValueChange={(v) => changeStatus(job, v)}>
+                          <SelectTrigger className={`h-7 w-[124px] text-[11px] font-medium border ${statusStyle(job.status)}`}><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            {STATUSES.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                        <button onClick={() => setExpanded(open ? null : job.id)} className="h-7 w-7 flex items-center justify-center text-muted-foreground">
+                          <ChevronDown className={`w-4 h-4 transition-transform ${open ? "rotate-180" : ""}`} />
+                        </button>
                       </div>
+
+                      {open && (
+                        <div className="px-4 pb-4 space-y-3 border-t border-border pt-3 animate-fade-in">
+                          {job.summary && <p className="text-xs text-muted-foreground">{job.summary}</p>}
+                          {!!job.skills?.length && (
+                            <div className="flex flex-wrap gap-1.5">
+                              {job.skills.map((s) => <span key={s} className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary">{s}</span>)}
+                            </div>
+                          )}
+                          {!!job.requirements?.length && (
+                            <ul className="text-[11px] text-muted-foreground space-y-0.5">
+                              {job.requirements.map((r, i) => <li key={i}>• {r}</li>)}
+                            </ul>
+                          )}
+                          {!!job.red_flags?.length && (
+                            <p className="text-[11px] text-amber-700 dark:text-amber-400">⚠ {job.red_flags.join(" · ")}</p>
+                          )}
+
+                          <div>
+                            <Label className="text-[11px] text-muted-foreground mb-1 block">Notes</Label>
+                            <Textarea
+                              defaultValue={job.notes || ""}
+                              onBlur={(e) => e.target.value !== (job.notes || "") && updateJob(job.id, { notes: e.target.value })}
+                              placeholder="Recruiter name, interview dates, thoughts…"
+                              className="min-h-16 text-xs bg-background resize-none"
+                            />
+                          </div>
+
+                          <div className="flex flex-wrap gap-2">
+                            <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => scoreFit(job)} disabled={scoring === job.id}>
+                              {scoring === job.id ? <Spinner className="w-3.5 h-3.5 mr-1.5" /> : <Target className="w-3.5 h-3.5 mr-1.5" />}
+                              {job.match_score != null ? "Re-score fit" : "Score my fit"}
+                            </Button>
+                            {job.job_url && (
+                              <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => router.push(`/dashboard/auto-applier/start?url=${encodeURIComponent(job.job_url!)}`)}>
+                                <Zap className="w-3.5 h-3.5 mr-1.5" /> Auto-apply
+                              </Button>
+                            )}
+                            <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => openTool(job, "/dashboard/cover-letter")}>
+                              <FileText className="w-3.5 h-3.5 mr-1.5" /> Cover letter
+                            </Button>
+                            <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => openTool(job, "/dashboard/interview-questions")}>
+                              <MessageSquare className="w-3.5 h-3.5 mr-1.5" /> Interview prep
+                            </Button>
+                            <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => openTool(job, "/dashboard/ats-checker")}>
+                              <BarChart3 className="w-3.5 h-3.5 mr-1.5" /> ATS check
+                            </Button>
+                            {job.job_url && (
+                              <a href={job.job_url} target="_blank" rel="noreferrer" className="inline-flex items-center h-8 px-3 text-xs rounded-md border border-border hover:bg-muted">
+                                <ExternalLink className="w-3.5 h-3.5 mr-1.5" /> Posting
+                              </a>
+                            )}
+                            <Button size="sm" variant="ghost" className="h-8 text-xs text-muted-foreground hover:text-destructive ml-auto" onClick={() => deleteJob(job.id)}>
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </Button>
+                          </div>
+                        </div>
+                      )}
                     </div>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => deleteJob(job.id)}
-                      className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10 shrink-0"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </Button>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             )}
           </CardContent>

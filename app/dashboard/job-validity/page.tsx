@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
@@ -8,11 +8,21 @@ import { Textarea } from "@/components/ui/textarea"
 import { Spinner } from "@/components/ui/spinner"
 import { Shield, AlertTriangle, CheckCircle2 } from "lucide-react"
 import { ResumeUploader } from "@/components/resume-uploader"
+import { SavedResumeButtons } from "@/components/saved-resume-button"
+import { JobLinkImporter } from "@/components/job-link-importer"
+import { consumeHandoff } from "@/lib/handoff"
 
 export default function JobValidityPage() {
   const [jobDescription, setJobDescription] = useState("")
   const [resumeText, setResumeText] = useState("")
   const [isLoading, setIsLoading] = useState(false)
+
+  // Pre-fill from Job Tracker / other tools
+  useEffect(() => {
+    const handoff = consumeHandoff()
+    if (handoff?.jobDescription) setJobDescription(handoff.jobDescription)
+    if (handoff?.resumeText) setResumeText(handoff.resumeText)
+  }, [])
   const [result, setResult] = useState<any>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -87,6 +97,9 @@ export default function JobValidityPage() {
             <CardContent className="space-y-4">
               <div>
                 <Label className="text-xs font-medium text-foreground mb-1.5 block">Your Resume</Label>
+                <div className="flex justify-end -mt-1 mb-1.5">
+                  <SavedResumeButtons resumeText={resumeText} onLoad={setResumeText} />
+                </div>
                 <ResumeUploader
                   onSuccess={(text) => {
                     setResumeText(text)
@@ -99,6 +112,7 @@ export default function JobValidityPage() {
 
               <div>
                 <Label htmlFor="job" className="text-xs font-medium text-foreground mb-1.5 block">Job Description</Label>
+                <JobLinkImporter className="mb-2" onImported={(text) => setJobDescription(text)} />
                 <Textarea
                   id="job"
                   placeholder="Paste the entire job listing here..."

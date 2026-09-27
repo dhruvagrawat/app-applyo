@@ -7,6 +7,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Spinner } from "@/components/ui/spinner"
 import { Copy, Check, Zap, Sparkles, FileText, Target } from "lucide-react"
+import { SavedResumeButtons } from "@/components/saved-resume-button"
 
 export default function ATSImproverPage() {
   const [resumeText, setResumeText] = useState("")
@@ -85,6 +86,9 @@ export default function ATSImproverPage() {
             <CardContent className="space-y-4">
               <div>
                 <Label htmlFor="resume" className="text-xs font-medium text-foreground mb-1.5 block">Resume Text</Label>
+                <div className="flex justify-end -mt-1 mb-1.5">
+                  <SavedResumeButtons resumeText={resumeText} onLoad={setResumeText} />
+                </div>
                 <Textarea
                   id="resume"
                   placeholder="Paste your resume content here..."

@@ -27,7 +27,12 @@ The companion project `applyo.app/` is an earlier prototype with a fancier landi
 ```
 app-applyo/
 ├── app/
-│   ├── page.tsx                    # Landing page (public)
+│   ├── page.tsx                    # Landing page (public, parallax hero, JSON-LD, FAQ)
+│   ├── blog/                       # Public blog: index, [slug], category/[category], rss.xml
+│   ├── robots.ts / sitemap.ts      # SEO: crawler rules (incl. AI bots) + sitemap of all public pages
+│   ├── manifest.ts                 # PWA manifest
+│   ├── opengraph-image.tsx         # Generated social cards (also per blog post)
+│   ├── llms.txt/ llms-full.txt/    # LLM-readable site map + full blog text (AI SEO)
 │   ├── layout.tsx                  # Root layout + ThemeProvider
 │   ├── globals.css                 # Global styles + animations
 │   ├── auth/
@@ -42,6 +47,8 @@ app-applyo/
 │   │   ├── ats-improver/           # ATS-targeted improvements
 │   │   ├── cover-letter/           # AI cover letter generation
 │   │   ├── interview-questions/    # Interview prep question generator
+│   │   ├── interview/              # Interview Studio: overview, guide, practice (question bank + AI feedback),
+│   │   │                           #   tests (+ tests/[id] runner, "ai" = generated quiz), video (mock interview)
 │   │   ├── job-finder/             # Job discovery
 │   │   ├── job-tracker/            # Smart tracker: paste a job link → AI parses it; fit score, tool handoff
 │   │   ├── job-resume-compare/     # Resume vs. job description match
@@ -67,6 +74,7 @@ app-applyo/
 │       │       ├── step/           POST - one AI agent step (fill / approved submit)
 │       │       ├── navigate/       POST - navigate the live browser
 │       │       └── complete/       POST - mark applied + add to job tracker
+│       ├── interview/              feedback (score an answer), generate (questions), quiz (AI test), history
 │       ├── jobs/parse/             POST - parse a job URL or pasted text into structured data
 │       ├── resumes/latest/         GET latest saved resume / POST save resume text
 │       ├── profile/application/    GET/PUT - application profile (phone, links, work auth, EEO…)
@@ -79,12 +87,19 @@ app-applyo/
 │   ├── resume-uploader.tsx         # PDF drag-and-drop uploader
 │   ├── job-link-importer.tsx       # "Paste a job link" → fills job description (used by all AI tools)
 │   ├── saved-resume-button.tsx     # "Use saved / Save" resume links next to resume inputs
+│   ├── site/                       # Public site header, footer, blog post card
+│   ├── landing/                    # Hero + motion primitives (Parallax, Reveal, Tilt, CountUp)
+│   ├── interview/                  # Interview Studio nav + AI feedback card
 │   ├── feature-card.tsx            # Reusable feature card
 │   ├── theme-provider.tsx          # next-themes provider
 │   └── ui/                         # shadcn/ui components
 ├── lib/
 │   ├── gemini.ts                   # Gemini API client (callGemini function)
 │   ├── handoff.ts                  # Pass a job between tools (sessionStorage) + jobToDescription()
+│   ├── site.ts                     # SITE config (name, url, description) used by all SEO code
+│   ├── seo/                        # JSON-LD helpers, OG image template, canonical feature list
+│   ├── blog/                       # 50 posts (posts/*.ts), categories, markdown renderer
+│   ├── interview/                  # Question bank, quizzes, guide chapters, delivery metrics, speech hook
 │   ├── jobs/
 │   │   ├── fetch-page.ts           # SSRF-safe page fetch, JSON-LD JobPosting + text extraction
 │   │   └── parse-job.ts            # parseJob(): URL/text → structured job via Gemini
@@ -110,7 +125,8 @@ app-applyo/
 │   ├── schema.sql                  # Initial DB schema (run first)
 │   ├── schema_additions.sql        # Adds job_applications table
 │   ├── schema_v2_additions.sql     # Adds auto_tasks + resume upload columns
-│   └── schema_v3_additions.sql     # Smart tracker columns, auto_tasks session columns, application_profile
+│   ├── schema_v3_additions.sql     # Smart tracker columns, auto_tasks session columns, application_profile
+│   └── schema_v4_additions.sql     # Interview Studio: interview_attempts, quiz_results
 └── middleware.ts                   # Next.js middleware → session refresh + auth redirect
 ```
 
@@ -127,6 +143,9 @@ SUPABASE_SERVICE_ROLE_KEY="<service role key>"
 SUPABASE_URL="https://xefkhuwyxkjjabxefooc.supabase.co"
 GEMINI_API_KEY="<gemini key>"
 STEEL_API_KEY="<steel.dev API key>"   # server-only; required for the auto-applier
+NEXT_PUBLIC_SITE_URL="https://applyo.app"   # canonical URLs, sitemap, OG images (defaults to applyo.app)
+NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION=""     # optional: Search Console token
+NEXT_PUBLIC_BING_SITE_VERIFICATION=""       # optional: Bing Webmaster token
 ```
 
 > Supabase project ref: `xefkhuwyxkjjabxefooc`
@@ -141,6 +160,7 @@ Run SQL scripts in this order against the Supabase project:
 2. `scripts/schema_additions.sql` — job_applications table
 3. `scripts/schema_v2_additions.sql` — resume upload columns + auto_tasks table
 4. `scripts/schema_v3_additions.sql` — smart tracker, auto-applier sessions, application profile
+5. `scripts/schema_v4_additions.sql` — Interview Studio history (interview_attempts, quiz_results)
 
 ### Tables
 
@@ -163,7 +183,9 @@ All tables use Row Level Security (RLS) — users can only see their own rows.
 - Supabase email/password auth
 - Middleware at `middleware.ts` refreshes sessions and redirects unauthenticated users to `/auth/login`
 - Dashboard layout (`app/dashboard/layout.tsx`) has a server-side auth guard
-- Public routes: `/` (landing), `/auth/*`
+- Public routes: `/` (landing), `/auth/*`, `/blog/*`, `/demo/*`, `/privacy`, `/terms`, and SEO files
+  (`robots.txt`, `sitemap.xml`, `llms.txt`, `manifest.webmanifest`, OG images) — see `PUBLIC_FILES` in `middleware.ts`.
+  Anything new that crawlers must reach has to be added there, or it will redirect to login.
 
 ---
 
@@ -181,6 +203,26 @@ All AI calls go through `lib/gemini.ts → callGemini()`. Prompts are centralize
 4. `complete` adds the job to `job_applications`; sessions are released on end/page leave.
 
 The Steel key stays server-side — never put it in client code.
+
+## Interview Studio (`/dashboard/interview`)
+
+- **Guide** — chapters in `lib/interview/guide.ts` (markdown via `lib/blog/markdown.tsx`); checklist progress in localStorage.
+- **Question bank** — `lib/interview/questions.ts`. Answers can be typed or dictated (Web Speech API, `use-speech.ts`);
+  `POST /api/interview/feedback` returns score, STAR check, strengths, improvements and a rewritten answer.
+- **Tests** — static quizzes in `lib/interview/quizzes.ts`; `POST /api/interview/quiz` generates one for any topic.
+- **Video** — `getUserMedia` + `MediaRecorder` recording, live transcript, pace/filler metrics (`metrics.ts`) and AI
+  feedback per answer. Recordings stay in the browser (blob URLs) unless the user downloads them.
+- History is saved to `interview_attempts` / `quiz_results` (schema v4); pages still work without the tables.
+- Hidden from the demo sidebar (needs a real account for AI + camera).
+
+## Blog & SEO
+
+- Posts are TypeScript data in `lib/blog/posts/<category>.ts` (markdown subset). Add a post there and it appears in the
+  blog, sitemap, RSS, `llms.txt` and `llms-full.txt` automatically. Link internally with `/blog/<slug>`.
+- Every public page sets `alternates.canonical`; the root layout deliberately sets none (children must not inherit `/`).
+- Pages that override `openGraph` must pass `images: [DEFAULT_OG_IMAGE]` (from `lib/site.ts`) or they lose the card.
+- Structured data: Organization + WebSite (root), SoftwareApplication + FAQPage (home), BlogPosting + BreadcrumbList
+  (+ FAQPage when a post has `faqs`).
 
 ## Running Locally
 

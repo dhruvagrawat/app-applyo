@@ -1,5 +1,12 @@
+import type { Metadata } from "next"
 import Link from "next/link"
 import { ArrowLeft, Sparkles } from "lucide-react"
+
+export const metadata: Metadata = {
+  title: "Privacy Policy",
+  description: "How Applyo collects, uses, stores and protects your personal data, and the choices and rights you have over it.",
+  alternates: { canonical: "/privacy" },
+}
 
 export default function PrivacyPage() {
   return (

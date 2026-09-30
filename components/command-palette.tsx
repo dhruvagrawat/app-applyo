@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation"
 import {
   Search, Brain, FileText, Target, Mail, BookOpen, Sparkles, ClipboardList,
   BarChart3, ShieldCheck, FolderOpen, Zap, CreditCard, User, Activity, Settings,
-  Wand2, CornerDownLeft,
+  Wand2, CornerDownLeft, Video, GraduationCap, ListChecks, MessageSquare,
 } from "lucide-react"
 
 type Cmd = { label: string; sub: string; slug: string; icon: React.ElementType; keywords?: string }
@@ -20,6 +20,15 @@ function buildCommands(basePath: string): Cmd[] {
     { label: "ATS Checker", sub: "Score your resume", slug: p("ats-checker"), icon: Target, keywords: "applicant tracking score" },
     { label: "ATS Improver", sub: "Boost your ATS score", slug: p("ats-improver"), icon: Target },
     { label: "Interview Prep", sub: "Practice questions", slug: p("interview-questions"), icon: BookOpen, keywords: "questions" },
+    ...(basePath === "/dashboard"
+      ? [
+          { label: "Interview Studio", sub: "Guide, questions, tests & video", slug: p("interview"), icon: Video, keywords: "mock practice" },
+          { label: "Interview Guide", sub: "STAR, research, negotiation", slug: p("interview/guide"), icon: GraduationCap, keywords: "learn tips" },
+          { label: "Question Bank", sub: "Answer with AI feedback", slug: p("interview/practice"), icon: MessageSquare, keywords: "practice answer behavioral" },
+          { label: "Skill Tests", sub: "Timed quizzes", slug: p("interview/tests"), icon: ListChecks, keywords: "quiz test mcq" },
+          { label: "Video Mock Interview", sub: "Record answers on camera", slug: p("interview/video"), icon: Video, keywords: "camera record webcam" },
+        ]
+      : []),
     { label: "Job Finder", sub: "Find matching roles", slug: p("job-finder"), icon: Search, keywords: "search jobs" },
     { label: "Job Tracker", sub: "Track applications", slug: p("job-tracker"), icon: ClipboardList, keywords: "kanban board" },
     { label: "Job-Resume Compare", sub: "Match score", slug: p("job-resume-compare"), icon: BookOpen },

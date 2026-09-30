@@ -5,7 +5,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
   ChevronDown, ChevronLeft, ChevronRight, Brain, Briefcase, User, LogOut, Sparkles,
-  Zap, CreditCard, BarChart2, FolderOpen, Search, Mail, Users,
+  Zap, CreditCard, BarChart2, FolderOpen, Search, Mail, Users, Video,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { createClient } from "@/lib/supabase/client"
@@ -38,6 +38,7 @@ const iconMap: Record<string, React.ReactNode> = {
   Search: <Search className="w-4 h-4" />,
   Mail: <Mail className="w-4 h-4" />,
   Users: <Users className="w-4 h-4" />,
+  Video: <Video className="w-4 h-4" />,
 }
 
 const BADGE_STYLES: Record<BadgeType, string> = {
@@ -66,6 +67,18 @@ function getSidebarData(basePath: string): SidebarGroup[] {
         { id: "ats_improver",    title: "ATS Improver",      href: `${basePath}/ats-improver` },
         { id: "email_maker",     title: "Email Maker",       href: `${basePath}/email-maker`, badge: "new" },
         { id: "interview_q",     title: "Interview Prep",    href: `${basePath}/interview-questions` },
+      ],
+    },
+    {
+      id: "interview_studio",
+      title: "Interview Studio",
+      icon: "Video",
+      children: [
+        { id: "iv_overview", title: "Overview",           href: `${basePath}/interview` },
+        { id: "iv_guide",    title: "Interview Guide",    href: `${basePath}/interview/guide` },
+        { id: "iv_practice", title: "Question Bank",      href: `${basePath}/interview/practice`, badge: "new" },
+        { id: "iv_tests",    title: "Skill Tests",        href: `${basePath}/interview/tests`, badge: "new" },
+        { id: "iv_video",    title: "Video Mock Interview", href: `${basePath}/interview/video`, badge: "new" },
       ],
     },
     {
@@ -154,7 +167,7 @@ export function Sidebar({ basePath = "/dashboard", isDemo = false }: SidebarProp
   const supabase = !isDemo ? createClient() : null
 
   // Recruiter Hub pages currently exist only in demo — hide the group in the real dashboard.
-  const sidebarData = getSidebarData(basePath).filter((g) => g.id !== "recruiter" || isDemo)
+  const sidebarData = getSidebarData(basePath).filter((g) => (g.id !== "recruiter" || isDemo) && (g.id !== "interview_studio" || !isDemo))
 
   const toggleGroup = (id: string) => {
     const newExpanded = new Set(expandedGroups)

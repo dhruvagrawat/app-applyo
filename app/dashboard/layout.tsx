@@ -1,3 +1,4 @@
+import type { Metadata } from "next"
 import type React from "react"
 import { Sidebar } from "@/components/sidebar"
 import { Topbar } from "@/components/topbar"
@@ -5,6 +6,11 @@ import { HelpAssistant } from "@/components/help-assistant"
 import { OnboardingWizard } from "@/components/onboarding-wizard"
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
+
+export const metadata: Metadata = {
+  title: { default: "Dashboard", template: "%s | Applyo" },
+  robots: { index: false, follow: false },
+}
 
 export default async function DashboardLayout({
   children,

@@ -80,7 +80,7 @@ export default function SignUpPage() {
 
         <Card className="border-border bg-card shadow-xl shadow-primary/5 animate-slide-up">
           <CardHeader className="text-center pb-4">
-            <CardTitle className="text-2xl font-bold text-foreground">Create Account</CardTitle>
+            <CardTitle className="text-2xl font-bold text-foreground"><h1>Create Account</h1></CardTitle>
             <CardDescription className="text-sm text-muted-foreground">
               Join thousands of job seekers using Applyo
             </CardDescription>

@@ -1,3 +1,4 @@
+import type { Metadata } from "next"
 import type React from "react"
 import { Sidebar } from "@/components/sidebar"
 import { DemoBanner } from "@/components/demo-banner"
@@ -6,6 +7,13 @@ import { ThemeCustomizer } from "@/components/theme-customizer"
 import { HelpAssistant } from "@/components/help-assistant"
 import { CommandPalette } from "@/components/command-palette"
 import { DEMO_USER } from "@/lib/demo/data"
+
+export const metadata: Metadata = {
+  title: { default: "Interactive Demo — Try Every AI Career Tool Free", template: "%s — Demo | Applyo" },
+  description:
+    "Try Applyo's AI resume improver, ATS checker, cover letter maker, job tracker and more with sample data. No sign-up required.",
+  alternates: { canonical: "/demo" },
+}
 
 function DemoTopbar() {
   return (

@@ -40,7 +40,7 @@ export default function DashboardPage() {
     { href: "/dashboard/resume-improver", icon: Brain, label: "AI Resume Improver", desc: "Enhance your resume with AI", color: "bg-orange-100 dark:bg-orange-950/50 text-orange-600 dark:text-orange-400" },
     { href: "/dashboard/ats-checker", icon: Target, label: "ATS Score Checker", desc: "Check ATS compatibility", color: "bg-amber-100 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400" },
     { href: "/dashboard/cover-letter", icon: FileText, label: "Cover Letter Maker", desc: "Create compelling cover letters", color: "bg-emerald-100 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400" },
-    { href: "/dashboard/interview-questions", icon: Brain, label: "Interview Prep", desc: "Generate practice questions", color: "bg-blue-100 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400" },
+    { href: "/dashboard/interview", icon: Brain, label: "Interview Studio", desc: "Guide, question bank, tests & video mock interviews", color: "bg-blue-100 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400" },
     { href: "/dashboard/job-finder", icon: Briefcase, label: "Job Finder", desc: "Discover matching opportunities", color: "bg-purple-100 dark:bg-purple-950/50 text-purple-600 dark:text-purple-400" },
     { href: "/dashboard/job-tracker", icon: BookOpen, label: "Job Tracker", desc: "Track your applications", color: "bg-rose-100 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400" },
   ]

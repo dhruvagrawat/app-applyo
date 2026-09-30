@@ -1,0 +1,9 @@
+/* TEAM */
+Product: Applyo
+Contact: hello [at] applyo.app
+Site: https://applyo.app
+
+/* SITE */
+Standards: HTML5, CSS3, TypeScript
+Components: Next.js, React, Tailwind CSS, Supabase
+Language: English

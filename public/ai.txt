@@ -1,0 +1,14 @@
+# ai.txt — guidance for AI crawlers and agents
+# Public marketing pages, the demo and the blog may be crawled, indexed, summarized and cited with a link.
+# Logged-in areas (/dashboard, /api, /auth) contain private user data and must not be accessed.
+User-Agent: *
+Allow: /
+Allow: /blog
+Allow: /demo
+Disallow: /dashboard
+Disallow: /api
+Disallow: /auth/login
+Allow: /auth/sign-up
+
+# Machine-readable site summary: https://applyo.app/llms.txt
+# Full article text: https://applyo.app/llms-full.txt

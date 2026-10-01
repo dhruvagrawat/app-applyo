@@ -12,7 +12,7 @@ export async function GET() {
     .from("resumes")
     .select("id, title, content, raw_text, created_at")
     .eq("user_id", user.id)
-    .order("created_at", { ascending: false })
+    .order("updated_at", { ascending: false })
     .limit(1)
     .maybeSingle()
 

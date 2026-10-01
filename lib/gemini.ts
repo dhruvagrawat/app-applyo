@@ -1,5 +1,8 @@
-const GEMINI_ENDPOINT =
-  "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent"
+// Model is configurable because Google retires model versions (the old `gemini-2.0-flash-exp` is gone).
+const GEMINI_MODEL = process.env.GEMINI_MODEL?.trim() || "gemini-2.5-flash"
+// Base URL override is useful for proxies and local testing.
+const GEMINI_BASE_URL = (process.env.GEMINI_BASE_URL?.trim() || "https://generativelanguage.googleapis.com/v1beta").replace(/\/$/, "")
+const GEMINI_ENDPOINT = `${GEMINI_BASE_URL}/models/${GEMINI_MODEL}:generateContent`
 
 function getApiKeys(): string[] {
   const keys: string[] = []
@@ -35,7 +38,13 @@ export async function callGemini(prompt: string, maxTokens = 4000): Promise<stri
         },
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { maxOutputTokens: maxTokens, temperature: 0.7 },
+          generationConfig: {
+            maxOutputTokens: maxTokens,
+            temperature: 0.7,
+            // 2.5 Flash "thinks" by default, and thinking tokens count against maxOutputTokens —
+            // which can truncate our JSON. These are formatting tasks, so turn thinking off.
+            ...(/2\.5-flash/.test(GEMINI_MODEL) ? { thinkingConfig: { thinkingBudget: 0 } } : {}),
+          },
         }),
       })
 
@@ -55,7 +64,10 @@ export async function callGemini(prompt: string, maxTokens = 4000): Promise<stri
       }
 
       const data = await response.json()
-      const content = data.candidates?.[0]?.content?.parts?.[0]?.text
+      const content = (data.candidates?.[0]?.content?.parts || [])
+        .filter((p: { text?: string; thought?: boolean }) => p.text && !p.thought)
+        .map((p: { text: string }) => p.text)
+        .join("")
 
       if (!content) {
         console.error("[gemini] Unexpected response shape:", JSON.stringify(data).slice(0, 300))

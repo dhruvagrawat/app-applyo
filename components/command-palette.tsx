@@ -22,6 +22,7 @@ function buildCommands(basePath: string): Cmd[] {
     { label: "Interview Prep", sub: "Practice questions", slug: p("interview-questions"), icon: BookOpen, keywords: "questions" },
     ...(basePath === "/dashboard"
       ? [
+          { label: "Resume Builder", sub: "Create & edit resumes", slug: p("resumes"), icon: FileText, keywords: "cv maker template pdf vault" },
           { label: "Interview Studio", sub: "Guide, questions, tests & video", slug: p("interview"), icon: Video, keywords: "mock practice" },
           { label: "Interview Guide", sub: "STAR, research, negotiation", slug: p("interview/guide"), icon: GraduationCap, keywords: "learn tips" },
           { label: "Question Bank", sub: "Answer with AI feedback", slug: p("interview/practice"), icon: MessageSquare, keywords: "practice answer behavioral" },

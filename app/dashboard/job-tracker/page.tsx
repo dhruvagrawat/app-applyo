@@ -27,6 +27,8 @@ import {
   BarChart3,
   AlertTriangle,
   Target,
+  LayoutList,
+  Columns3,
 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { jobToDescription, setHandoff } from "@/lib/handoff"
@@ -96,6 +98,21 @@ export default function JobTrackerPage() {
   const [query, setQuery] = useState("")
   const [filter, setFilter] = useState("all")
   const [expanded, setExpanded] = useState<string | null>(null)
+  const [view, setView] = useState<"list" | "board">("list")
+  const [dragId, setDragId] = useState<string | null>(null)
+  const [dragOver, setDragOver] = useState<string | null>(null)
+
+  useEffect(() => {
+    try {
+      if (localStorage.getItem("applyo:tracker-view") === "board") setView("board")
+    } catch {}
+  }, [])
+  const switchView = (v: "list" | "board") => {
+    setView(v)
+    try {
+      localStorage.setItem("applyo:tracker-view", v)
+    } catch {}
+  }
   const [scoring, setScoring] = useState<string | null>(null)
 
   useEffect(() => {
@@ -450,14 +467,66 @@ export default function JobTrackerPage() {
                   {visible.length} of {jobs.length} {filter !== "all" && `· ${filter}`}
                 </CardDescription>
               </div>
-              <div className="relative md:w-64">
-                <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                <Input placeholder="Search title, company, skill…" value={query} onChange={(e) => setQuery(e.target.value)} className="h-9 pl-8 text-xs bg-muted" />
+              <div className="flex items-center gap-2">
+                <div className="relative md:w-64 flex-1">
+                  <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                  <Input placeholder="Search title, company, skill…" value={query} onChange={(e) => setQuery(e.target.value)} className="h-9 pl-8 text-xs bg-muted" />
+                </div>
+                <div className="flex rounded-lg border border-border p-0.5 bg-muted/40" role="group" aria-label="View">
+                  <button onClick={() => switchView("list")} title="List view" aria-pressed={view === "list"} className={`p-1.5 rounded-md ${view === "list" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground"}`}><LayoutList className="w-4 h-4" /></button>
+                  <button onClick={() => switchView("board")} title="Board view" aria-pressed={view === "board"} className={`p-1.5 rounded-md ${view === "board" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground"}`}><Columns3 className="w-4 h-4" /></button>
+                </div>
               </div>
             </div>
           </CardHeader>
           <CardContent>
-            {isLoading ? (
+            {!isLoading && view === "board" && jobs.length > 0 ? (
+              <div className="grid grid-flow-col auto-cols-[minmax(220px,1fr)] gap-3 overflow-x-auto pb-2">
+                {STATUSES.map((col) => {
+                  const colJobs = visible.filter((j) => j.status === col.value)
+                  return (
+                    <div
+                      key={col.value}
+                      onDragOver={(e) => { e.preventDefault(); setDragOver(col.value) }}
+                      onDragLeave={() => setDragOver((d) => (d === col.value ? null : d))}
+                      onDrop={(e) => {
+                        e.preventDefault()
+                        const job = jobs.find((j) => j.id === (dragId || e.dataTransfer.getData("text/plain")))
+                        if (job && job.status !== col.value) changeStatus(job, col.value)
+                        setDragId(null)
+                        setDragOver(null)
+                      }}
+                      className={`rounded-xl border p-2 min-h-64 transition-colors ${dragOver === col.value ? "border-primary bg-primary/5" : "border-border bg-muted/30"}`}
+                    >
+                      <div className="flex items-center justify-between px-1.5 py-1 mb-2">
+                        <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${col.style}`}>{col.label}</span>
+                        <span className="text-[11px] text-muted-foreground">{colJobs.length}</span>
+                      </div>
+                      <div className="space-y-2">
+                        {colJobs.map((job) => (
+                          <div
+                            key={job.id}
+                            draggable
+                            onDragStart={(e) => { setDragId(job.id); e.dataTransfer.setData("text/plain", job.id) }}
+                            onDragEnd={() => { setDragId(null); setDragOver(null) }}
+                            onClick={() => { switchView("list"); setExpanded(job.id) }}
+                            className={`rounded-lg border border-border bg-card p-2.5 cursor-grab active:cursor-grabbing hover:border-primary/30 ${dragId === job.id ? "opacity-50" : ""}`}
+                          >
+                            <p className="text-xs font-medium text-foreground leading-snug">{job.job_title}</p>
+                            <p className="text-[11px] text-muted-foreground mt-0.5">{job.company_name}</p>
+                            <div className="flex items-center gap-2 mt-1.5 text-[10px] text-muted-foreground">
+                              {job.match_score != null && <span className="font-semibold text-foreground">{job.match_score}% fit</span>}
+                              {job.location && <span className="truncate">{job.location}</span>}
+                            </div>
+                          </div>
+                        ))}
+                        {colJobs.length === 0 && <p className="text-[11px] text-muted-foreground text-center py-6">Drop here</p>}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            ) : isLoading ? (
               <div className="text-center py-12"><Spinner className="w-8 h-8 mx-auto text-primary" /></div>
             ) : visible.length === 0 ? (
               <div className="text-center py-14">

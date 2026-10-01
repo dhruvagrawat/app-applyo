@@ -37,6 +37,7 @@ export default function DashboardPage() {
   }, [supabase])
 
   const quickLinks = [
+    { href: "/dashboard/resumes", icon: FileText, label: "Resume Builder", desc: "Build a clean, ATS-friendly resume", color: "bg-stone-100 dark:bg-stone-900/50 text-stone-700 dark:text-stone-300" },
     { href: "/dashboard/resume-improver", icon: Brain, label: "AI Resume Improver", desc: "Enhance your resume with AI", color: "bg-orange-100 dark:bg-orange-950/50 text-orange-600 dark:text-orange-400" },
     { href: "/dashboard/ats-checker", icon: Target, label: "ATS Score Checker", desc: "Check ATS compatibility", color: "bg-amber-100 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400" },
     { href: "/dashboard/cover-letter", icon: FileText, label: "Cover Letter Maker", desc: "Create compelling cover letters", color: "bg-emerald-100 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400" },

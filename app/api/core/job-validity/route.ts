@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { callGemini } from "@/lib/gemini"
+import { parseJsonLoose } from "@/lib/jobs/parse-job"
 import { createServerClient } from "@supabase/ssr"
 import { cookies } from "next/headers"
 
@@ -47,7 +48,7 @@ Provide JSON with:
 Return ONLY valid JSON.`
 
     const responseText = await callGemini(prompt)
-    const result = JSON.parse(responseText)
+    const result = parseJsonLoose(responseText)
 
     await supabase.from("generated_items").insert({
       user_id: user.id,

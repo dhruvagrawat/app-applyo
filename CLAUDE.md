@@ -16,7 +16,7 @@ The companion project `applyo.app/` is an earlier prototype with a fancier landi
 | Language | TypeScript |
 | Styling | Tailwind CSS v4 + shadcn/ui |
 | Auth + DB | Supabase (SSR, RLS) |
-| AI | Google Gemini 2.0 Flash (`gemini-2.0-flash-exp`) |
+| AI | Google Gemini (default `gemini-2.5-flash`, override with `GEMINI_MODEL`) |
 | PDF Parsing | `pdf-parse`, `pdfjs-dist` |
 | Package Manager | pnpm |
 
@@ -42,6 +42,10 @@ app-applyo/
 │   ├── dashboard/
 │   │   ├── layout.tsx              # Dashboard shell (Sidebar + Topbar), auth guard
 │   │   ├── page.tsx                # Dashboard home (stats + quick links)
+│   │   ├── resumes/                # Resume Builder: vault (list/import/duplicate) + [id] editor with live preview & PDF
+│   │   ├── email-maker/            # AI follow-up / thank-you / outreach emails
+│   │   ├── analytics/              # Real usage stats (server component)
+│   │   ├── billing/                # Plan page (checkout not wired yet — contact link)
 │   │   ├── resume-improver/        # AI resume enhancement
 │   │   ├── ats-checker/            # ATS compatibility scoring
 │   │   ├── ats-improver/           # ATS-targeted improvements
@@ -76,7 +80,10 @@ app-applyo/
 │       │       └── complete/       POST - mark applied + add to job tracker
 │       ├── interview/              feedback (score an answer), generate (questions), quiz (AI test), history
 │       ├── jobs/parse/             POST - parse a job URL or pasted text into structured data
-│       ├── resumes/latest/         GET latest saved resume / POST save resume text
+│       ├── resumes/                GET list / POST create (blank, from data, or copyFrom)
+│       │   ├── [id]/               GET / PUT (builder data → also syncs plain-text `content`) / DELETE
+│       │   ├── ai/                 POST action: parse | bullet | summary | tailor
+│       │   └── latest/             GET most recently *edited* resume (used by every tool) / POST save text
 │       ├── profile/application/    GET/PUT - application profile (phone, links, work auth, EEO…)
 │       ├── upload/resume/          POST - PDF resume upload + parsing
 │       ├── profile/                GET/PUT - user profile CRUD
@@ -100,6 +107,7 @@ app-applyo/
 │   ├── seo/                        # JSON-LD helpers, OG image template, canonical feature list
 │   ├── blog/                       # 50 posts (posts/*.ts), categories, markdown renderer
 │   ├── interview/                  # Question bank, quizzes, guide chapters, delivery metrics, speech hook
+│   ├── resume/types.ts             # ResumeData model, normalizeResume(), resumeToText(), completeness score
 │   ├── jobs/
 │   │   ├── fetch-page.ts           # SSRF-safe page fetch, JSON-LD JobPosting + text extraction
 │   │   └── parse-job.ts            # parseJob(): URL/text → structured job via Gemini
@@ -126,7 +134,8 @@ app-applyo/
 │   ├── schema_additions.sql        # Adds job_applications table
 │   ├── schema_v2_additions.sql     # Adds auto_tasks + resume upload columns
 │   ├── schema_v3_additions.sql     # Smart tracker columns, auto_tasks session columns, application_profile
-│   └── schema_v4_additions.sql     # Interview Studio: interview_attempts, quiz_results
+│   ├── schema_v4_additions.sql     # Interview Studio: interview_attempts, quiz_results
+│   └── schema_v5_additions.sql     # Resume edit/delete RLS, profile insert + auto-create trigger, misc RLS fixes
 └── middleware.ts                   # Next.js middleware → session refresh + auth redirect
 ```
 
@@ -141,7 +150,9 @@ NEXT_PUBLIC_SUPABASE_URL="https://xefkhuwyxkjjabxefooc.supabase.co"
 NEXT_PUBLIC_SUPABASE_ANON_KEY="<anon key>"
 SUPABASE_SERVICE_ROLE_KEY="<service role key>"
 SUPABASE_URL="https://xefkhuwyxkjjabxefooc.supabase.co"
-GEMINI_API_KEY="<gemini key>"
+GEMINI_API_KEY="<gemini key>"          # or GEMINI_API_KEY_1..10 for rotation
+GEMINI_MODEL="gemini-2.5-flash"        # optional override
+GEMINI_BASE_URL=""                     # optional (proxy / local mock)
 STEEL_API_KEY="<steel.dev API key>"   # server-only; required for the auto-applier
 NEXT_PUBLIC_SITE_URL="https://applyo.app"   # canonical URLs, sitemap, OG images (defaults to applyo.app)
 NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION=""     # optional: Search Console token
@@ -161,6 +172,8 @@ Run SQL scripts in this order against the Supabase project:
 3. `scripts/schema_v2_additions.sql` — resume upload columns + auto_tasks table
 4. `scripts/schema_v3_additions.sql` — smart tracker, auto-applier sessions, application profile
 5. `scripts/schema_v4_additions.sql` — Interview Studio history (interview_attempts, quiz_results)
+6. `scripts/schema_v5_additions.sql` — **required**: lets users edit/delete resumes and create their profile row
+   (adds an `auth.users` trigger that creates `profiles` on sign-up). Every script is safe to re-run.
 
 ### Tables
 
@@ -215,6 +228,16 @@ The Steel key stays server-side — never put it in client code.
 - History is saved to `interview_attempts` / `quiz_results` (schema v4); pages still work without the tables.
 - Hidden from the demo sidebar (needs a real account for AI + camera).
 
+## Resume Builder (`/dashboard/resumes`)
+
+- Structured data lives in `resumes.metadata.builder` (`ResumeData`, see `lib/resume/types.ts`); every save also writes a
+  plain-text copy to `resumes.content`, so "Use saved resume", ATS checker, fit scoring and the Auto-Applier all pick
+  up the latest edits automatically (ordered by `updated_at`).
+- Always pass untrusted JSON (client, DB, AI) through `normalizeResume()`.
+- Templates (`minimal`, `classic`, `compact`) are single-column on purpose (ATS-safe). PDF export is the browser print
+  dialog; print CSS in `globals.css` isolates `#resume-print`.
+- AI actions never invent facts; missing metrics come back as `[brackets]`.
+
 ## Blog & SEO
 
 - Posts are TypeScript data in `lib/blog/posts/<category>.ts` (markdown subset). Add a post there and it appears in the
@@ -223,6 +246,12 @@ The Steel key stays server-side — never put it in client code.
 - Pages that override `openGraph` must pass `images: [DEFAULT_OG_IMAGE]` (from `lib/site.ts`) or they lose the card.
 - Structured data: Organization + WebSite (root), SoftwareApplication + FAQPage (home), BlogPosting + BreadcrumbList
   (+ FAQPage when a post has `faqs`).
+
+## Testing end-to-end without cloud services
+
+The full flow (sign-up → resume builder → AI tools → tracker → interview studio) was verified against a local
+Supabase-compatible stack (Postgres 16 + GoTrue + PostgREST behind a small gateway) and a mock Gemini server pointed
+to via `GEMINI_BASE_URL`. Apply all `scripts/*.sql` in order on a fresh database to reproduce.
 
 ## Running Locally
 

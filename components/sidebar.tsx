@@ -60,6 +60,9 @@ function getSidebarData(basePath: string): SidebarGroup[] {
       title: "AI Tools",
       icon: "Brain",
       children: [
+        ...(basePath === "/dashboard"
+          ? [{ id: "resumes", title: "Resume Builder", href: `${basePath}/resumes`, badge: "new" as BadgeType }]
+          : []),
         { id: "tailor", title: "Tailor Everything", href: `${basePath}/tailor`, badge: "new" },
         { id: "resume_improver", title: "Resume Improver",   href: `${basePath}/resume-improver` },
         { id: "cover_letter",    title: "Cover Letter",      href: `${basePath}/cover-letter` },
@@ -117,7 +120,9 @@ function getSidebarData(basePath: string): SidebarGroup[] {
       title: "Workspace",
       icon: "FolderOpen",
       children: [
-        { id: "memory",       title: "Resume Vault",       href: `${basePath}/memory`, badge: "new" },
+        ...(basePath === "/dashboard"
+          ? [{ id: "vault", title: "Resume Vault", href: `${basePath}/resumes` }]
+          : [{ id: "memory", title: "Resume Vault", href: `${basePath}/memory`, badge: "new" as BadgeType }]),
         { id: "saved_items",  title: "Saved Items",        href: `${basePath}/saved`, badge: "soon" },
       ],
     },
@@ -167,7 +172,10 @@ export function Sidebar({ basePath = "/dashboard", isDemo = false }: SidebarProp
   const supabase = !isDemo ? createClient() : null
 
   // Recruiter Hub pages currently exist only in demo — hide the group in the real dashboard.
-  const sidebarData = getSidebarData(basePath).filter((g) => (g.id !== "recruiter" || isDemo) && (g.id !== "interview_studio" || !isDemo))
+  const sidebarData = getSidebarData(basePath)
+    .filter((g) => (g.id !== "recruiter" || isDemo) && (g.id !== "interview_studio" || !isDemo))
+    .map((g) => ({ ...g, children: g.children.filter((c) => c.badge !== "soon") }))
+    .filter((g) => g.children.length > 0)
 
   const toggleGroup = (id: string) => {
     const newExpanded = new Set(expandedGroups)

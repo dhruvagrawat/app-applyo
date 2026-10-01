@@ -54,7 +54,7 @@ export async function loadCandidate(userId: string, email?: string | null) {
       .from("resumes")
       .select("content, raw_text")
       .eq("user_id", userId)
-      .order("created_at", { ascending: false })
+      .order("updated_at", { ascending: false })
       .limit(1)
       .maybeSingle(),
   ])

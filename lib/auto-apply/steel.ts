@@ -43,7 +43,8 @@ export function createSteelSession(opts: { timeoutMs?: number } = {}) {
     method: "POST",
     body: JSON.stringify({
       timeout: opts.timeoutMs ?? 15 * 60 * 1000,
-      solveCaptcha: true,
+      // Never auto-solve CAPTCHAs: the agent hands them to the user (see "What Auto-Applier will NOT do").
+      solveCaptcha: false,
       blockAds: true,
       dimensions: { width: 1280, height: 800 },
       debugConfig: { interactive: true },

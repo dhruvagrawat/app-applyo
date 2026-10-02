@@ -29,7 +29,10 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
-  if (request.nextUrl.pathname !== "/" && !user && !request.nextUrl.pathname.startsWith("/auth")) {
+  // API routes answer 401 themselves (and the mobile app authenticates with a bearer token),
+  // so only page requests are redirected to the login screen.
+  const path = request.nextUrl.pathname
+  if (path !== "/" && !user && !path.startsWith("/auth") && !path.startsWith("/api/")) {
     const url = request.nextUrl.clone()
     url.pathname = "/auth/login"
     return NextResponse.redirect(url)
